@@ -1,4 +1,4 @@
-## myrpc
+## rpc与mapreduce
 
 ### 项目简介
 
@@ -35,8 +35,7 @@ System.out.println(res);
 
 #### rpc架构
 
-![rpc](https://github.com/996990870/myRpc/assets/54765732/5edd47a1-88a0-4548-ac7a-88a949bd9141)
-
+!<img src=".\images\rpc.png" alt="rpc" />
 
 上图可以描述为如下几个步骤
 
@@ -52,10 +51,32 @@ System.out.println(res);
 
 #### mapreduce框架
 
-完善中...
+mapreduce主要通过map和reduce两个操作来完成一个复杂的任务，其主要通过master和多个worker组成，master负责分发任务和错误处理，worker负责具体任务的完成（map or reduce)，本实现的map和reduce的任务是完成文件中的单词统计。
+
+<img src=".\images\mapReduce.png" alt="rpc" style="zoom:50%;" />
+
+在master启动阶段，需要告知master需要处理的文件夹路径（默认在resources/wordCountFiles/），在启动后，master需要不断监听以此来连接worker，当有worker连接后便可以给其分发任务，在worker工作的整个过程中，master会不断地发送心跳检测以此来判断当前worker的健康状况，如果当前worker不能正常响应，master就会主动断开连接(当然，这里可以有很多的判定策略)。worker在初始化时，会开启能够供master调用的本地服务，当worker初始化完成后，就会主动与master发起连接请求，连接成功后就可以正常提供服务了。
+
+在跨机器的处理时，非常容易因为网络故障或者机器宕机而造成分发的任务不能按时完成，从而造成系统的可靠性降低，所以容错处理是非常必要的，master作为整个系统的协调者，应该需要考虑很多情况：
+
+1.worker断开连接或者无响应怎么办？
+
+master只要未得到worker的响应结果，会等待至少一个心跳周期，若在该周期内worker主动断开连接或者周期心跳无反应，master感知后会主动断开连接并将该任务重新放回任务队列进行再次分配。
+
+2.如何保证任务的有序发放，做到不丢失，不重复？
+
+在任务的发放过程中分层次发放，先分发map任务，在分发reduce任务，这样可以减少并发带来的效率问题。由于master的任务确认机制，不丢失是能够做到的，但是不重复需要通过额外的机制进行实现，比如map完成后进行去重等，本项目中的任务为统计单词个数，可以通过文件系统自身的机制实现不重复。
+
+3.多线程并发问题？
+
+mapreduce中的线程并发问题主要集中在对worker资源以及任务资源的并发访问上，在分配worker和任务时，均使用了锁来实现有序并发（对于任务多的场景可以使用CAS和预分配策略）。
 
 ### 技术要点
 
 - netty通信
 - zookeeper注册中心
 - 动态代理 
+- 多线程同步
+- maven分模块
+- git操作（设置.gitignore文件）
+
